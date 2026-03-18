@@ -1,47 +1,68 @@
 // public/app.js
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Register form submission
-    document.getElementById("register-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        
-        const username = document.getElementById("register-username").value;
-        const password = document.getElementById("register-password").value;
-        
-        const response = await fetch("http://localhost:3000/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password })
+    const registerForm = document.getElementById("register-form");
+    const loginForm = document.getElementById("login-form");
+
+    // Register form submission (only on register.html)
+    if (registerForm) {
+        registerForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById("register-username").value;
+            const password = document.getElementById("register-password").value;
+
+            try {
+                const response = await fetch("/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    alert("Registration successful!");
+                    window.location.href = "index.html";
+                } else {
+                    const errorMsg = data.errors
+                        ? data.errors.map(err => err.msg).join("\n")
+                        : data.message;
+                    alert(errorMsg);
+                }
+            } catch (error) {
+                alert("An error occurred. Please try again.");
+            }
         });
+    }
 
-        const data = await response.json();
-        if (response.ok) {
-            alert("Registration successful!");
-            window.location.href = "index.html"; // Redirect to login page
-        } else {
-            alert(data.message);
-        }
-    });
+    // Login form submission (only on index.html)
+    if (loginForm) {
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
 
-    // Login form submission
-    document.getElementById("login-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        
-        const username = document.getElementById("username").value;
-        const password = document.getElementById("password").value;
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
 
-        const response = await fetch("http://localhost:3000/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password })
+            try {
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    sessionStorage.setItem("token", data.token);
+                    window.location.href = "dashboard.html";
+                } else {
+                    const errorMsg = data.errors
+                        ? data.errors.map(err => err.msg).join("\n")
+                        : data.message;
+                    alert(errorMsg);
+                }
+            } catch (error) {
+                alert("An error occurred. Please try again.");
+            }
         });
-
-        const data = await response.json();
-        if (response.ok) {
-            localStorage.setItem("token", data.token); // Store token
-            window.location.href = "dashboard.html";  // Redirect to dashboard
-        } else {
-            alert(data.message);
-        }
-    });
+    }
 });
