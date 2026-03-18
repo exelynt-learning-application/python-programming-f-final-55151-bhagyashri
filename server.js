@@ -1,10 +1,11 @@
+// server.js
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const dotenv = require("dotenv");
 const bodyParser = require("body-parser");
-const expressValidator = require("express-validator");
+const { body, validationResult } = require("express-validator");
 const cors = require("cors");
 
 dotenv.config();
@@ -15,14 +16,22 @@ const port = 3000;
 
 // Middleware
 app.use(bodyParser.json());
-app.use(expressValidator());
 app.use(cors()); // Enable CORS for all origins
 
-// Check if JWT_SECRET is set
-if (!process.env.JWT_SECRET) {
-    console.error("JWT_SECRET is not set in the environment variables");
-    process.exit(1);
-}
+// Serve static files (HTML, CSS, JS)
+app.use(express.static("public"));
+
+// Rate limiter for login and registration routes
+const rateLimit = require("express-rate-limit");
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: "Too many requests, please try again later."
+});
+
+// Apply rate limiter to specific routes
+app.use("/login", limiter);
+app.use("/register", limiter);
 
 // Database connection (MongoDB with Mongoose)
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -36,18 +45,17 @@ const User = require("./models/user");
 const passwordValidationRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 // Route to handle user registration
-app.post("/register", async (req, res) => {
-    const { username, password } = req.body;
-
-    // Input validation and sanitization
-    req.checkBody("username", "Username is required").notEmpty();
-    req.checkBody("password", "Password is required").notEmpty();
-    req.checkBody("password", "Password must be at least 8 characters long, include 1 letter, 1 number, and 1 special character").matches(passwordValidationRegex);
-
-    const errors = req.validationErrors();
-    if (errors) {
-        return res.status(400).json({ errors });
+app.post("/register", [
+    body("username").notEmpty().withMessage("Username is required"),
+    body("password").matches(passwordValidationRegex).withMessage("Password must be at least 8 characters long, include 1 letter, 1 number, and 1 special character")
+], async (req, res) => {
+    // Validate input
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
     }
+
+    const { username, password } = req.body;
 
     // Sanitize inputs
     const sanitizedUsername = username.trim();
@@ -72,17 +80,17 @@ app.post("/register", async (req, res) => {
 });
 
 // Route to handle user login
-app.post("/login", async (req, res) => {
-    const { username, password } = req.body;
-
-    // Input validation and sanitization
-    req.checkBody("username", "Username is required").notEmpty();
-    req.checkBody("password", "Password is required").notEmpty();
-
-    const errors = req.validationErrors();
-    if (errors) {
-        return res.status(400).json({ errors });
+app.post("/login", [
+    body("username").notEmpty().withMessage("Username is required"),
+    body("password").notEmpty().withMessage("Password is required")
+], async (req, res) => {
+    // Validate input
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
     }
+
+    const { username, password } = req.body;
 
     // Sanitize inputs
     const sanitizedUsername = username.trim();
