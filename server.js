@@ -7,6 +7,7 @@ const dotenv = require("dotenv");
 const { body, validationResult } = require("express-validator");
 const cors = require("cors");
 const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 dotenv.config();
 
@@ -37,7 +38,6 @@ app.use(cors({
 app.use(express.static("public"));
 
 // Rate limiter for login and registration routes
-const rateLimit = require("express-rate-limit");
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // limit each IP to 100 requests per windowMs
@@ -51,7 +51,19 @@ app.use("/register", limiter);
 // Database connection (MongoDB with Mongoose)
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log("MongoDB connected"))
-    .catch(err => console.log(err));
+    .catch(err => {
+        console.error("MongoDB connection error:", err.message);
+        process.exit(1);
+    });
+
+// Handle MongoDB connection errors after initial connection
+mongoose.connection.on("error", (err) => {
+    console.error("MongoDB connection error:", err.message);
+});
+
+mongoose.connection.on("disconnected", () => {
+    console.warn("MongoDB disconnected. Attempting to reconnect...");
+});
 
 // User model (MongoDB)
 const User = require("./models/user");
@@ -128,9 +140,9 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Dashboard route (protected)
-app.get("/dashboard", authenticateToken, (req, res) => {
-    res.json({ message: `Welcome to the Dashboard`, userId: req.user.userId });
+// Dashboard API route (protected)
+app.get("/api/dashboard", authenticateToken, (req, res) => {
+    res.json({ message: "Welcome to the Dashboard", userId: req.user.userId });
 });
 
 // Logout route
