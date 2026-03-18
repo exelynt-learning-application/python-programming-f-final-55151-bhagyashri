@@ -7,8 +7,15 @@ const dotenv = require("dotenv");
 const bodyParser = require("body-parser");
 const { body, validationResult } = require("express-validator");
 const cors = require("cors");
+const helmet = require("helmet");
+const sanitizeHtml = require("sanitize-html");
 
 dotenv.config();
+
+// Check if JWT_SECRET is set
+if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET not configured in environment variables");
+}
 
 // Initialize app and set port
 const app = express();
@@ -18,8 +25,19 @@ const port = 3000;
 app.use(bodyParser.json());
 app.use(cors()); // Enable CORS for all origins
 
+// Use helmet for basic security headers
+app.use(helmet());
+
 // Serve static files (HTML, CSS, JS)
 app.use(express.static("public"));
+
+// Configure CORS with specific origins
+const allowedOrigins = ['http://localhost:3000', 'https://yourdomain.com'];
+app.use(cors({
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Rate limiter for login and registration routes
 const rateLimit = require("express-rate-limit");
@@ -46,28 +64,23 @@ const passwordValidationRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d
 
 // Route to handle user registration
 app.post("/register", [
-    body("username").notEmpty().withMessage("Username is required"),
-    body("password").matches(passwordValidationRegex).withMessage("Password must be at least 8 characters long, include 1 letter, 1 number, and 1 special character")
+    body("username").notEmpty().withMessage("Username is required").escape(),
+    body("password").matches(passwordValidationRegex).withMessage("Password must be at least 8 characters long, include 1 letter, 1 number, and 1 special character").escape()
 ], async (req, res) => {
-    // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
     const { username, password } = req.body;
+    const sanitizedUsername = sanitizeHtml(username.trim());
+    const sanitizedPassword = sanitizeHtml(password.trim());
 
-    // Sanitize inputs
-    const sanitizedUsername = username.trim();
-    const sanitizedPassword = password.trim();
-
-    // Check if the user already exists
     const existingUser = await User.findOne({ username: sanitizedUsername });
     if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(sanitizedPassword, 10);
     const newUser = new User({ username: sanitizedUsername, password: hashedPassword });
 
@@ -81,20 +94,17 @@ app.post("/register", [
 
 // Route to handle user login
 app.post("/login", [
-    body("username").notEmpty().withMessage("Username is required"),
-    body("password").notEmpty().withMessage("Password is required")
+    body("username").notEmpty().withMessage("Username is required").escape(),
+    body("password").notEmpty().withMessage("Password is required").escape()
 ], async (req, res) => {
-    // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
     const { username, password } = req.body;
-
-    // Sanitize inputs
-    const sanitizedUsername = username.trim();
-    const sanitizedPassword = password.trim();
+    const sanitizedUsername = sanitizeHtml(username.trim());
+    const sanitizedPassword = sanitizeHtml(password.trim());
 
     const user = await User.findOne({ username: sanitizedUsername });
     if (!user) return res.status(400).json({ message: "User not found" });
@@ -102,7 +112,6 @@ app.post("/login", [
     const validPassword = await bcrypt.compare(sanitizedPassword, user.password);
     if (!validPassword) return res.status(400).json({ message: "Invalid credentials" });
 
-    // Generate JWT token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
     res.json({ message: "Login successful", token });
 });
@@ -126,8 +135,13 @@ app.get("/dashboard", authenticateToken, (req, res) => {
 
 // Logout route
 app.get("/logout", (req, res) => {
-    // Destroy the session or JWT
     res.json({ message: "You have logged out successfully" });
+});
+
+// Centralized error handler
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ message: 'Something went wrong!' });
 });
 
 // Start the server
