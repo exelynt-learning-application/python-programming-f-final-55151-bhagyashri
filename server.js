@@ -11,14 +11,17 @@ const rateLimit = require("express-rate-limit");
 
 dotenv.config();
 
-// Check if JWT_SECRET is set
+// Validate required environment variables
 if (!process.env.JWT_SECRET) {
     throw new Error("JWT_SECRET not configured in environment variables");
+}
+if (!process.env.MONGO_URI) {
+    throw new Error("MONGO_URI not configured in environment variables");
 }
 
 // Initialize app and set port
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
@@ -49,7 +52,7 @@ app.use("/login", limiter);
 app.use("/register", limiter);
 
 // Database connection (MongoDB with Mongoose)
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("MongoDB connected"))
     .catch(err => {
         console.error("MongoDB connection error:", err.message);
@@ -73,7 +76,7 @@ const passwordValidationRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&#^()_+\-
 
 // Route to handle user registration
 app.post("/register", [
-    body("username").notEmpty().withMessage("Username is required").trim().escape(),
+    body("username").notEmpty().withMessage("Username is required").isLength({ min: 3, max: 30 }).withMessage("Username must be between 3 and 30 characters").trim().escape(),
     body("password").matches(passwordValidationRegex).withMessage("Password must be at least 8 characters long, include 1 letter and 1 number")
 ], async (req, res) => {
     try {
