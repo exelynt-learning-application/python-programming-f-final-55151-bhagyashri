@@ -30,7 +30,11 @@ app.use(express.json());
 app.use(helmet());
 
 // Configure CORS with specific origins
-const allowedOrigins = ['http://localhost:3000', 'https://yourdomain.com'];
+const allowedOrigins = [
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+    'https://yourdomain.com'
+];
 app.use(cors({
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
@@ -118,10 +122,10 @@ app.post("/login", [
         const sanitizedUsername = username.trim();
 
         const user = await User.findOne({ username: sanitizedUsername });
-        if (!user) return res.status(400).json({ message: "Invalid credentials" });
+        if (!user) return res.status(400).json({ message: "Invalid username or password" });
 
         const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) return res.status(400).json({ message: "Invalid credentials" });
+        if (!validPassword) return res.status(400).json({ message: "Invalid username or password" });
 
         const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
         res.json({ message: "Login successful", token });
@@ -142,6 +146,12 @@ function authenticateToken(req, res, next) {
         next();
     });
 }
+
+// Token refresh route (protected) - issues a new token before the current one expires
+app.post("/api/refresh-token", authenticateToken, (req, res) => {
+    const newToken = jwt.sign({ userId: req.user.userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    res.json({ token: newToken });
+});
 
 // Dashboard API route (protected)
 app.get("/api/dashboard", authenticateToken, (req, res) => {

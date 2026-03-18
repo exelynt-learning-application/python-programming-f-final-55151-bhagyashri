@@ -29,18 +29,60 @@
 
                 if (response.status === 401 || response.status === 403) {
                     sessionStorage.removeItem("token");
+                    alert("Session expired. Please log in again.");
                     window.location.href = "index.html";
+                    return;
+                }
+
+                if (response.status === 500) {
+                    document.getElementById("welcome-message").textContent =
+                        "Server error. Please try again later.";
+                    return;
+                }
+
+                if (!response.ok) {
+                    document.getElementById("welcome-message").textContent =
+                        "Something went wrong. Please try again.";
                     return;
                 }
 
                 const data = await response.json();
                 document.getElementById("welcome-message").textContent = data.message;
             } catch (error) {
-                sessionStorage.removeItem("token");
-                window.location.href = "index.html";
+                document.getElementById("welcome-message").textContent =
+                    "Network error. Please check your connection and try again.";
             }
 
+            // Refresh token every 45 minutes to prevent abrupt logout
+            const refreshInterval = setInterval(async () => {
+                const currentToken = sessionStorage.getItem("token");
+                if (!currentToken) {
+                    clearInterval(refreshInterval);
+                    return;
+                }
+
+                try {
+                    const refreshResponse = await fetch("/api/refresh-token", {
+                        method: "POST",
+                        headers: { "Authorization": "Bearer " + currentToken }
+                    });
+
+                    if (refreshResponse.ok) {
+                        const refreshData = await refreshResponse.json();
+                        sessionStorage.setItem("token", refreshData.token);
+                    } else {
+                        clearInterval(refreshInterval);
+                        sessionStorage.removeItem("token");
+                        alert("Session expired. Please log in again.");
+                        window.location.href = "index.html";
+                    }
+                } catch (error) {
+                    // Network error during refresh - keep current token and retry next interval
+                }
+            }, 45 * 60 * 1000);
+
             document.getElementById("logout-btn").addEventListener("click", () => {
+                clearInterval(refreshInterval);
                 sessionStorage.removeItem("token");
                 window.location.href = "index.html";
             });
